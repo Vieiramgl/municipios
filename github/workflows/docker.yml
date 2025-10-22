@@ -1,0 +1,54 @@
+name: Build and Publish Docker image for Node.js app
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (if any)
+        run: npm test --silent || true
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/municipios:latest
+          docker build -t $IMAGE_NAME .
+
+      - name: Scan Docker image with Trivy (optional)
+        if: env.TRIVY_DISABLE != 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/municipios:latest
+          format: 'table'
+          exit-code: '0'
+
+      - name: Push Docker image to GHCR
+        run: |
+          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/municipios:latest
+          docker push $IMAGE_NAME
